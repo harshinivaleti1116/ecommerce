@@ -17,7 +17,7 @@ st.set_page_config(
 
 API_URL = os.getenv(
     "API_URL",
-    "https://ecommerce-npsa.onrender.com"
+    "https://ecommerce-api-lb4g.onrender.com"
 )
 
 
