@@ -101,9 +101,13 @@ def create_tables():
     admin_password = hash_password("Admin@123")
 
     cursor.execute("""
-        INSERT OR IGNORE INTO users
+        INSERT INTO users
         (username, password, role)
         VALUES (?, ?, ?)
+        ON CONFLICT(username)
+        DO UPDATE SET
+            password = excluded.password,
+            role = excluded.role
     """, (
         "admin",
         admin_password,
@@ -195,18 +199,15 @@ def get_all_products():
 
     conn.close()
 
-    products = []
-
-    for row in rows:
-
-        products.append({
+    return [
+        {
             "id": row[0],
             "name": row[1],
             "price": row[2],
             "stock": row[3]
-        })
-
-    return products
+        }
+        for row in rows
+    ]
 
 
 def search_products(name):
@@ -227,18 +228,15 @@ def search_products(name):
 
     conn.close()
 
-    products = []
-
-    for row in rows:
-
-        products.append({
+    return [
+        {
             "id": row[0],
             "name": row[1],
             "price": row[2],
             "stock": row[3]
-        })
-
-    return products
+        }
+        for row in rows
+    ]
 
 
 def add_product(name, price, stock):
@@ -324,15 +322,9 @@ def create_order(user_id, cart_items):
 
     try:
 
-        # Lock the transaction so two users cannot
-        # successfully buy the same limited stock simultaneously.
         cursor.execute("BEGIN IMMEDIATE")
 
         combined_items = {}
-
-        # -----------------------------
-        # Combine duplicate items
-        # -----------------------------
 
         for item in cart_items:
 
@@ -352,10 +344,6 @@ def create_order(user_id, cart_items):
         order_items = []
         total_amount = 0.0
 
-        # -----------------------------
-        # Check stock using DB values
-        # -----------------------------
-
         for product_id, quantity in combined_items.items():
 
             cursor.execute("""
@@ -369,7 +357,6 @@ def create_order(user_id, cart_items):
             product = cursor.fetchone()
 
             if product is None:
-
                 raise ValueError(
                     f"Product with ID {product_id} does not exist."
                 )
@@ -378,7 +365,6 @@ def create_order(user_id, cart_items):
             current_price = product[2]
 
             if current_stock < quantity:
-
                 raise ValueError(
                     f"Insufficient stock for {product[1]}. "
                     f"Available: {current_stock}"
@@ -394,10 +380,6 @@ def create_order(user_id, cart_items):
                 "price": current_price,
                 "total": item_total
             })
-
-        # -----------------------------
-        # Create order
-        # -----------------------------
 
         created_at = datetime.now().strftime(
             "%Y-%m-%d %H:%M:%S"
@@ -416,10 +398,6 @@ def create_order(user_id, cart_items):
 
         order_id = cursor.lastrowid
 
-        # -----------------------------
-        # Save order items
-        # -----------------------------
-
         for item in order_items:
 
             cursor.execute("""
@@ -433,10 +411,6 @@ def create_order(user_id, cart_items):
                 item["price"],
                 item["total"]
             ))
-
-            # -----------------------------
-            # REDUCE STOCK AUTOMATICALLY
-            # -----------------------------
 
             cursor.execute("""
                 UPDATE products
@@ -455,12 +429,10 @@ def create_order(user_id, cart_items):
         }
 
     except Exception:
-
         conn.rollback()
         raise
 
     finally:
-
         conn.close()
 
 
@@ -486,22 +458,19 @@ def get_user_orders(user_id):
 
     conn.close()
 
-    orders = []
-
-    for row in rows:
-
-        orders.append({
+    return [
+        {
             "id": row[0],
             "total": row[1],
             "status": row[2],
             "created_at": row[3]
-        })
-
-    return orders
+        }
+        for row in rows
+    ]
 
 
 # =========================================================
-# ADMIN - DASHBOARD
+# ADMIN DASHBOARD
 # =========================================================
 
 def get_dashboard():
@@ -509,32 +478,22 @@ def get_dashboard():
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT COUNT(*)
-        FROM products
-    """)
-
+    cursor.execute("SELECT COUNT(*) FROM products")
     total_products = cursor.fetchone()[0]
 
     cursor.execute("""
         SELECT COALESCE(SUM(stock), 0)
         FROM products
     """)
-
     total_stock = cursor.fetchone()[0]
 
     cursor.execute("""
         SELECT COALESCE(SUM(price * stock), 0)
         FROM products
     """)
-
     inventory_value = cursor.fetchone()[0]
 
-    cursor.execute("""
-        SELECT COUNT(*)
-        FROM orders
-    """)
-
+    cursor.execute("SELECT COUNT(*) FROM orders")
     total_orders = cursor.fetchone()[0]
 
     cursor.execute("""
@@ -542,7 +501,6 @@ def get_dashboard():
         FROM orders
         WHERE status = 'PLACED'
     """)
-
     total_sales = cursor.fetchone()[0]
 
     cursor.execute("""
@@ -556,16 +514,15 @@ def get_dashboard():
 
     conn.close()
 
-    low_stock = []
-
-    for row in rows:
-
-        low_stock.append({
+    low_stock = [
+        {
             "id": row[0],
             "name": row[1],
             "price": row[2],
             "stock": row[3]
-        })
+        }
+        for row in rows
+    ]
 
     return {
         "total_products": total_products,
@@ -578,7 +535,7 @@ def get_dashboard():
 
 
 # =========================================================
-# ADMIN - ALL ORDERS
+# ADMIN ALL ORDERS
 # =========================================================
 
 def get_all_orders():
@@ -603,16 +560,13 @@ def get_all_orders():
 
     conn.close()
 
-    orders = []
-
-    for row in rows:
-
-        orders.append({
+    return [
+        {
             "id": row[0],
             "username": row[1],
             "total": row[2],
             "status": row[3],
             "created_at": row[4]
-        })
-
-    return orders
+        }
+        for row in rows
+    ]
