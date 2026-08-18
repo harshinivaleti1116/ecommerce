@@ -16,7 +16,14 @@ st.set_page_config(
 
 
 # =========================================================
-# API CONFIGURATION
+# API URL
+# =========================================================
+# LOCAL:
+# http://127.0.0.1:8000
+#
+# RENDER:
+# Set API_URL in Render Environment Variables
+# to your FastAPI Render URL.
 # =========================================================
 
 API_URL = os.getenv(
@@ -24,13 +31,28 @@ API_URL = os.getenv(
     "http://127.0.0.1:8000"
 ).rstrip("/")
 
+
 # =========================================================
-# BACKGROUND
+# BASE DIRECTORY
 # =========================================================
+
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
+
+# =========================================================
+# BACKGROUND IMAGE
+# =========================================================
+
+BACKGROUND_PATH = os.path.join(
+    BASE_DIR,
+    "background.png"
+)
 
 try:
 
-    with open("background.png", "rb") as file:
+    with open(BACKGROUND_PATH, "rb") as file:
 
         image = base64.b64encode(
             file.read()
@@ -101,7 +123,9 @@ try:
 
 except FileNotFoundError:
 
-    pass
+    st.warning(
+        "background.png was not found."
+    )
 
 
 # =========================================================
@@ -139,7 +163,6 @@ if not st.session_state.logged_in:
         ["🔐 Login", "📝 Create Account"]
     )
 
-
     # =====================================================
     # LOGIN
     # =====================================================
@@ -164,23 +187,29 @@ if not st.session_state.logged_in:
         ):
 
             if username.strip() == "":
-                st.error("Please enter your username.")
+
+                st.error(
+                    "Please enter your username."
+                )
 
             elif password == "":
-                st.error("Please enter your password.")
+
+                st.error(
+                    "Please enter your password."
+                )
 
             else:
 
                 try:
 
-                   response = requests.post(
-                    API_URL + "/login",
-                    json={
-                      "username": username.strip(),
-                      "password": password
-                    },
-                  timeout=30
-                   )
+                    response = requests.post(
+                        API_URL + "/login",
+                        json={
+                            "username": username.strip(),
+                            "password": password
+                        },
+                        timeout=30
+                    )
 
                     if response.status_code == 200:
 
@@ -191,21 +220,45 @@ if not st.session_state.logged_in:
                         st.session_state.username = result["username"]
                         st.session_state.role = result["role"]
                         st.session_state.cart = {}
+                        st.session_state.edit_id = None
 
                         st.rerun()
 
                     else:
 
-                        st.error(
-                            response.json()["detail"]
-                        )
+                        try:
+
+                            message = response.json().get(
+                                "detail",
+                                "Login failed."
+                            )
+
+                        except Exception:
+
+                            message = (
+                                f"Server returned HTTP "
+                                f"{response.status_code}"
+                            )
+
+                        st.error(message)
 
                 except requests.exceptions.ConnectionError:
 
                     st.error(
-                        "FastAPI backend is not running."
+                        "❌ Cannot connect to FastAPI backend."
                     )
 
+                except requests.exceptions.Timeout:
+
+                    st.error(
+                        "❌ FastAPI backend took too long to respond."
+                    )
+
+                except requests.exceptions.RequestException as error:
+
+                    st.error(
+                        f"❌ Request failed: {error}"
+                    )
 
     # =====================================================
     # SIGNUP
@@ -272,7 +325,7 @@ if not st.session_state.logged_in:
                             "username": username.strip(),
                             "password": password
                         },
-                        timeout=5
+                        timeout=30
                     )
 
                     if response.status_code == 200:
@@ -284,14 +337,38 @@ if not st.session_state.logged_in:
 
                     else:
 
-                        st.error(
-                            response.json()["detail"]
-                        )
+                        try:
+
+                            message = response.json().get(
+                                "detail",
+                                "Signup failed."
+                            )
+
+                        except Exception:
+
+                            message = (
+                                f"Server returned HTTP "
+                                f"{response.status_code}"
+                            )
+
+                        st.error(message)
 
                 except requests.exceptions.ConnectionError:
 
                     st.error(
-                        "FastAPI backend is not running."
+                        "❌ Cannot connect to FastAPI backend."
+                    )
+
+                except requests.exceptions.Timeout:
+
+                    st.error(
+                        "❌ FastAPI backend took too long to respond."
+                    )
+
+                except requests.exceptions.RequestException as error:
+
+                    st.error(
+                        f"❌ Request failed: {error}"
                     )
 
     st.stop()
@@ -343,32 +420,69 @@ with st.sidebar:
 
 
 # =========================================================
-# ADMIN
+# ADMIN DASHBOARD
 # =========================================================
 
 if st.session_state.role == "admin":
 
     st.title("👨‍💼 Admin Dashboard")
 
-    response = requests.get(
-        API_URL + "/dashboard",
-        headers=HEADERS
-    )
+    try:
 
-    if response.status_code != 200:
+        response = requests.get(
+            API_URL + "/dashboard",
+            headers=HEADERS,
+            timeout=30
+        )
+
+        if response.status_code != 200:
+
+            try:
+
+                message = response.json().get(
+                    "detail",
+                    "Unable to load admin dashboard."
+                )
+
+            except Exception:
+
+                message = (
+                    f"Server returned HTTP "
+                    f"{response.status_code}"
+                )
+
+            st.error(message)
+            st.stop()
+
+        dashboard = response.json()
+
+    except requests.exceptions.ConnectionError:
 
         st.error(
-            "Unable to load admin dashboard."
+            "❌ Cannot connect to FastAPI backend."
         )
 
         st.stop()
 
-    dashboard = response.json()
+    except requests.exceptions.Timeout:
 
+        st.error(
+            "❌ FastAPI backend took too long to respond."
+        )
 
-    # -----------------------------
+        st.stop()
+
+    except requests.exceptions.RequestException as error:
+
+        st.error(
+            f"❌ Request failed: {error}"
+        )
+
+        st.stop()
+
+    # =====================================================
     # METRICS
-    # -----------------------------
+    # =====================================================
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -405,10 +519,9 @@ if st.session_state.role == "admin":
             )
         )
 
-
-    # -----------------------------
+    # =====================================================
     # LOW STOCK
-    # -----------------------------
+    # =====================================================
 
     st.subheader(
         "⚠️ Low Stock"
@@ -430,9 +543,7 @@ if st.session_state.role == "admin":
                 product["stock"]
             )
 
-
     st.divider()
-
 
     # =====================================================
     # ADD PRODUCT
@@ -464,39 +575,69 @@ if st.session_state.role == "admin":
             step=1
         )
 
-
     if st.button(
         "➕ Add Product",
         type="primary"
     ):
 
-        response = requests.post(
-            API_URL + "/products",
-            headers=HEADERS,
-            json={
-                "name": admin_name,
-                "price": admin_price,
-                "stock": admin_stock
-            }
-        )
+        try:
 
-        if response.status_code == 200:
-
-            st.success(
-                "Product added successfully."
+            response = requests.post(
+                API_URL + "/products",
+                headers=HEADERS,
+                json={
+                    "name": admin_name,
+                    "price": admin_price,
+                    "stock": admin_stock
+                },
+                timeout=30
             )
 
-            st.rerun()
+            if response.status_code == 200:
 
-        else:
+                st.success(
+                    "Product added successfully."
+                )
+
+                st.rerun()
+
+            else:
+
+                try:
+
+                    message = response.json().get(
+                        "detail",
+                        "Unable to add product."
+                    )
+
+                except Exception:
+
+                    message = (
+                        f"Server returned HTTP "
+                        f"{response.status_code}"
+                    )
+
+                st.error(message)
+
+        except requests.exceptions.ConnectionError:
 
             st.error(
-                response.json()["detail"]
+                "❌ Cannot connect to FastAPI backend."
             )
 
+        except requests.exceptions.Timeout:
+
+            st.error(
+                "❌ FastAPI backend took too long to respond."
+            )
+
+        except requests.exceptions.RequestException as error:
+
+            st.error(
+                f"❌ Request failed: {error}"
+            )
 
     st.divider()
-
 
     # =====================================================
     # ADMIN ORDERS
@@ -504,52 +645,105 @@ if st.session_state.role == "admin":
 
     st.header("📦 Orders")
 
-    response = requests.get(
-        API_URL + "/orders",
-        headers=HEADERS
-    )
+    try:
 
-    if response.status_code == 200:
+        response = requests.get(
+            API_URL + "/orders",
+            headers=HEADERS,
+            timeout=30
+        )
 
-        orders = response.json()
+        if response.status_code == 200:
 
-        if len(orders) == 0:
+            orders = response.json()
 
-            st.info(
-                "No orders yet."
-            )
+            if len(orders) == 0:
+
+                st.info(
+                    "No orders yet."
+                )
+
+            else:
+
+                for order in orders:
+
+                    st.write(
+                        f"**Order #{order['id']}** | "
+                        f"Customer: {order['username']} | "
+                        f"Total: ₹{order['total']:.2f} | "
+                        f"Status: {order['status']} | "
+                        f"{order['created_at']}"
+                    )
 
         else:
 
-            for order in orders:
+            st.error(
+                "Unable to load orders."
+            )
 
-                st.write(
-                    f"**Order #{order['id']}** | "
-                    f"Customer: {order['username']} | "
-                    f"Total: ₹{order['total']:.2f} | "
-                    f"Status: {order['status']} | "
-                    f"{order['created_at']}"
-                )
+    except requests.exceptions.RequestException as error:
+
+        st.error(
+            f"❌ Request failed: {error}"
+        )
 
 
 # =========================================================
 # GET ALL PRODUCTS
 # =========================================================
 
-response = requests.get(
-    API_URL + "/products",
-    headers=HEADERS
-)
+try:
 
-if response.status_code != 200:
+    response = requests.get(
+        API_URL + "/products",
+        headers=HEADERS,
+        timeout=30
+    )
+
+    if response.status_code != 200:
+
+        try:
+
+            message = response.json().get(
+                "detail",
+                "Unable to load products."
+            )
+
+        except Exception:
+
+            message = (
+                f"Server returned HTTP "
+                f"{response.status_code}"
+            )
+
+        st.error(message)
+        st.stop()
+
+    products = response.json()
+
+except requests.exceptions.ConnectionError:
 
     st.error(
-        "Unable to load products."
+        "❌ Cannot connect to FastAPI backend."
     )
 
     st.stop()
 
-products = response.json()
+except requests.exceptions.Timeout:
+
+    st.error(
+        "❌ FastAPI backend took too long to respond."
+    )
+
+    st.stop()
+
+except requests.exceptions.RequestException as error:
+
+    st.error(
+        f"❌ Request failed: {error}"
+    )
+
+    st.stop()
 
 
 # =========================================================
@@ -564,7 +758,6 @@ if st.session_state.role == "user":
         "Choose products and quantities"
     )
 
-
     # =====================================================
     # SEARCH
     # =====================================================
@@ -575,17 +768,31 @@ if st.session_state.role == "user":
 
     if search_text.strip():
 
-        response = requests.get(
-            API_URL
-            + "/products/search/"
-            + search_text.strip(),
-            headers=HEADERS
-        )
+        try:
 
-        if response.status_code == 200:
+            response = requests.get(
+                API_URL
+                + "/products/search/"
+                + search_text.strip(),
+                headers=HEADERS,
+                timeout=30
+            )
 
-            products = response.json()
+            if response.status_code == 200:
 
+                products = response.json()
+
+            else:
+
+                st.error(
+                    "Unable to search products."
+                )
+
+        except requests.exceptions.RequestException as error:
+
+            st.error(
+                f"❌ Search failed: {error}"
+            )
 
     # =====================================================
     # PRODUCTS
@@ -677,20 +884,37 @@ if st.session_state.role == "user":
 
         st.divider()
 
-
     # =====================================================
     # CART
     # =====================================================
 
     st.header("🛒 My Cart")
 
-    # Always get the latest prices/stocks
-    response = requests.get(
-        API_URL + "/products",
-        headers=HEADERS
-    )
+    try:
 
-    latest_products = response.json()
+        response = requests.get(
+            API_URL + "/products",
+            headers=HEADERS,
+            timeout=30
+        )
+
+        if response.status_code != 200:
+
+            st.error(
+                "Unable to refresh cart."
+            )
+
+            st.stop()
+
+        latest_products = response.json()
+
+    except requests.exceptions.RequestException as error:
+
+        st.error(
+            f"❌ Unable to refresh cart: {error}"
+        )
+
+        st.stop()
 
     product_lookup = {}
 
@@ -700,10 +924,8 @@ if st.session_state.role == "user":
             product["id"]
         ] = product
 
-
     cart_rows = []
     cart_total = 0.0
-
 
     for product_id, quantity in list(
         st.session_state.cart.items()
@@ -721,8 +943,6 @@ if st.session_state.role == "user":
 
             continue
 
-
-        # If stock changed lower, reduce cart quantity
         if quantity > product["stock"]:
 
             quantity = product["stock"]
@@ -739,7 +959,6 @@ if st.session_state.role == "user":
                 product_id
             ] = quantity
 
-
         item_total = (
             product["price"] * quantity
         )
@@ -753,7 +972,6 @@ if st.session_state.role == "user":
             "quantity": quantity,
             "total": item_total
         })
-
 
     if len(cart_rows) == 0:
 
@@ -795,14 +1013,12 @@ if st.session_state.role == "user":
                     + f"{item['total']:.2f}"
                 )
 
-
         st.divider()
 
         st.subheader(
             "Cart Total: ₹"
             + f"{cart_total:.2f}"
         )
-
 
         # =================================================
         # CHECKOUT
@@ -823,44 +1039,74 @@ if st.session_state.role == "user":
                     "quantity": item["quantity"]
                 })
 
+            try:
 
-            response = requests.post(
-                API_URL + "/checkout",
-                headers=HEADERS,
-                json={
-                    "items": checkout_items
-                }
-            )
-
-
-            if response.status_code == 200:
-
-                result = response.json()
-
-                st.session_state.cart = {}
-
-                st.success(
-                    "✅ Order placed successfully!"
+                response = requests.post(
+                    API_URL + "/checkout",
+                    headers=HEADERS,
+                    json={
+                        "items": checkout_items
+                    },
+                    timeout=30
                 )
 
-                st.success(
-                    "Order ID: "
-                    + str(result["order_id"])
-                )
+                if response.status_code == 200:
 
-                st.success(
-                    "Amount: ₹"
-                    + f"{result['total']:.2f}"
-                )
+                    result = response.json()
 
-                st.rerun()
+                    st.session_state.cart = {}
 
-            else:
+                    st.success(
+                        "✅ Order placed successfully!"
+                    )
+
+                    st.success(
+                        "Order ID: "
+                        + str(result["order_id"])
+                    )
+
+                    st.success(
+                        "Amount: ₹"
+                        + f"{result['total']:.2f}"
+                    )
+
+                    st.rerun()
+
+                else:
+
+                    try:
+
+                        message = response.json().get(
+                            "detail",
+                            "Checkout failed."
+                        )
+
+                    except Exception:
+
+                        message = (
+                            f"Server returned HTTP "
+                            f"{response.status_code}"
+                        )
+
+                    st.error(message)
+
+            except requests.exceptions.ConnectionError:
 
                 st.error(
-                    response.json()["detail"]
+                    "❌ Cannot connect to FastAPI backend."
                 )
 
+            except requests.exceptions.Timeout:
+
+                st.error(
+                    "❌ FastAPI backend took too long to respond."
+                )
+
+            except requests.exceptions.RequestException as error:
+
+                st.error(
+                    f"❌ Request failed: {error}"
+                )
 
     # =====================================================
     # ORDER HISTORY
@@ -870,31 +1116,46 @@ if st.session_state.role == "user":
 
     st.header("📜 My Orders")
 
-    response = requests.get(
-        API_URL + "/orders/me",
-        headers=HEADERS
-    )
+    try:
 
-    if response.status_code == 200:
+        response = requests.get(
+            API_URL + "/orders/me",
+            headers=HEADERS,
+            timeout=30
+        )
 
-        orders = response.json()
+        if response.status_code == 200:
 
-        if len(orders) == 0:
+            orders = response.json()
 
-            st.info(
-                "No orders yet."
-            )
+            if len(orders) == 0:
+
+                st.info(
+                    "No orders yet."
+                )
+
+            else:
+
+                for order in orders:
+
+                    st.write(
+                        f"Order #{order['id']} | "
+                        f"₹{order['total']:.2f} | "
+                        f"{order['status']} | "
+                        f"{order['created_at']}"
+                    )
 
         else:
 
-            for order in orders:
+            st.error(
+                "Unable to load order history."
+            )
 
-                st.write(
-                    f"Order #{order['id']} | "
-                    f"₹{order['total']:.2f} | "
-                    f"{order['status']} | "
-                    f"{order['created_at']}"
-                )
+    except requests.exceptions.RequestException as error:
+
+        st.error(
+            f"❌ Request failed: {error}"
+        )
 
 
 # =========================================================
@@ -904,7 +1165,6 @@ if st.session_state.role == "user":
 if st.session_state.role == "admin":
 
     st.header("📦 Product Management")
-
 
     if len(products) == 0:
 
@@ -959,27 +1219,47 @@ if st.session_state.role == "admin":
                     key="delete_" + str(product["id"])
                 ):
 
-                    response = requests.delete(
-                        API_URL
-                        + "/products/"
-                        + str(product["id"]),
-                        headers=HEADERS
-                    )
+                    try:
 
-                    if response.status_code == 200:
-
-                        st.success(
-                            "Product deleted."
+                        response = requests.delete(
+                            API_URL
+                            + "/products/"
+                            + str(product["id"]),
+                            headers=HEADERS,
+                            timeout=30
                         )
 
-                        st.rerun()
+                        if response.status_code == 200:
 
-                    else:
+                            st.success(
+                                "Product deleted."
+                            )
+
+                            st.rerun()
+
+                        else:
+
+                            try:
+
+                                message = response.json().get(
+                                    "detail",
+                                    "Unable to delete product."
+                                )
+
+                            except Exception:
+
+                                message = (
+                                    f"Server returned HTTP "
+                                    f"{response.status_code}"
+                                )
+
+                            st.error(message)
+
+                    except requests.exceptions.RequestException as error:
 
                         st.error(
-                            response.json()["detail"]
+                            f"❌ Request failed: {error}"
                         )
-
 
     # =====================================================
     # UPDATE PRODUCT
@@ -1000,8 +1280,8 @@ if st.session_state.role == "admin":
             if product["id"] == edit_id:
 
                 selected_product = product
-                break
 
+                break
 
         if selected_product is not None:
 
@@ -1031,9 +1311,7 @@ if st.session_state.role == "admin":
                 key="edit_stock"
             )
 
-
             col1, col2 = st.columns(2)
-
 
             with col1:
 
@@ -1043,34 +1321,54 @@ if st.session_state.role == "admin":
                     use_container_width=True
                 ):
 
-                    response = requests.put(
-                        API_URL
-                        + "/products/"
-                        + str(edit_id),
-                        headers=HEADERS,
-                        json={
-                            "name": new_name,
-                            "price": new_price,
-                            "stock": new_stock
-                        }
-                    )
+                    try:
 
-                    if response.status_code == 200:
-
-                        st.session_state.edit_id = None
-
-                        st.success(
-                            "Product updated."
+                        response = requests.put(
+                            API_URL
+                            + "/products/"
+                            + str(edit_id),
+                            headers=HEADERS,
+                            json={
+                                "name": new_name,
+                                "price": new_price,
+                                "stock": new_stock
+                            },
+                            timeout=30
                         )
 
-                        st.rerun()
+                        if response.status_code == 200:
 
-                    else:
+                            st.session_state.edit_id = None
+
+                            st.success(
+                                "Product updated."
+                            )
+
+                            st.rerun()
+
+                        else:
+
+                            try:
+
+                                message = response.json().get(
+                                    "detail",
+                                    "Unable to update product."
+                                )
+
+                            except Exception:
+
+                                message = (
+                                    f"Server returned HTTP "
+                                    f"{response.status_code}"
+                                )
+
+                            st.error(message)
+
+                    except requests.exceptions.RequestException as error:
 
                         st.error(
-                            response.json()["detail"]
+                            f"❌ Request failed: {error}"
                         )
-
 
             with col2:
 
