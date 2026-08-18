@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from jose import jwt, JWTError
 import os
@@ -30,7 +31,26 @@ app = FastAPI(
 )
 
 
-create_tables()
+# =========================================================
+# CORS
+# =========================================================
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# =========================================================
+# DATABASE STARTUP
+# =========================================================
+
+@app.on_event("startup")
+def startup_event():
+    create_tables()
 
 
 # =========================================================
@@ -41,13 +61,14 @@ SECRET_KEY = os.getenv(
     "SECRET_KEY",
     "development-secret-change-this"
 )
+
 ALGORITHM = "HS256"
 
 security = HTTPBearer()
 
 
 # =========================================================
-# AUTH FUNCTIONS
+# AUTH
 # =========================================================
 
 def create_token(user_id, username, role):
@@ -85,7 +106,7 @@ def get_current_user(
 
         raise HTTPException(
             status_code=401,
-            detail="Invalid authentication token"
+            detail="Invalid authentication token."
         )
 
 
@@ -97,7 +118,7 @@ def require_admin(
 
         raise HTTPException(
             status_code=403,
-            detail="Admin access required"
+            detail="Admin access required."
         )
 
     return user
@@ -108,32 +129,27 @@ def require_admin(
 # =========================================================
 
 class SignupData(BaseModel):
-
     username: str
     password: str
 
 
 class LoginData(BaseModel):
-
     username: str
     password: str
 
 
 class ProductData(BaseModel):
-
     name: str
     price: float
     stock: int
 
 
 class CartItem(BaseModel):
-
     product_id: int
     quantity: int
 
 
 class CheckoutData(BaseModel):
-
     items: list[CartItem]
 
 
@@ -146,6 +162,19 @@ def home():
 
     return {
         "message": "E-Commerce Store API is running"
+    }
+
+
+# =========================================================
+# HEALTH
+# =========================================================
+
+@app.get("/health")
+def health():
+
+    return {
+        "status": "ok",
+        "message": "Backend is running"
     }
 
 
@@ -224,8 +253,7 @@ def login(user: LoginData):
 
 
 # =========================================================
-# GET PRODUCTS
-# Accessible to logged-in users
+# PRODUCTS
 # =========================================================
 
 @app.get("/products")
@@ -235,10 +263,6 @@ def products(
 
     return get_all_products()
 
-
-# =========================================================
-# SEARCH PRODUCTS
-# =========================================================
 
 @app.get("/products/search/{name}")
 def search(
@@ -250,7 +274,7 @@ def search(
 
 
 # =========================================================
-# ADMIN - ADD PRODUCT
+# ADMIN ADD
 # =========================================================
 
 @app.post("/products")
@@ -261,22 +285,19 @@ def create_product(
 
     name = product.name.strip()
 
-    if name == "":
-
+    if not name:
         raise HTTPException(
             status_code=400,
             detail="Product name is required."
         )
 
     if product.price < 0:
-
         raise HTTPException(
             status_code=400,
             detail="Price cannot be negative."
         )
 
     if product.stock < 0:
-
         raise HTTPException(
             status_code=400,
             detail="Stock cannot be negative."
@@ -295,7 +316,7 @@ def create_product(
 
 
 # =========================================================
-# ADMIN - UPDATE PRODUCT
+# ADMIN UPDATE
 # =========================================================
 
 @app.put("/products/{product_id}")
@@ -307,22 +328,19 @@ def edit_product(
 
     name = product.name.strip()
 
-    if name == "":
-
+    if not name:
         raise HTTPException(
             status_code=400,
             detail="Product name is required."
         )
 
     if product.price < 0:
-
         raise HTTPException(
             status_code=400,
             detail="Price cannot be negative."
         )
 
     if product.stock < 0:
-
         raise HTTPException(
             status_code=400,
             detail="Stock cannot be negative."
@@ -336,7 +354,6 @@ def edit_product(
     )
 
     if updated == 0:
-
         raise HTTPException(
             status_code=404,
             detail="Product not found."
@@ -348,7 +365,7 @@ def edit_product(
 
 
 # =========================================================
-# ADMIN - DELETE PRODUCT
+# ADMIN DELETE
 # =========================================================
 
 @app.delete("/products/{product_id}")
@@ -360,7 +377,6 @@ def remove_product(
     deleted = delete_product(product_id)
 
     if deleted == 0:
-
         raise HTTPException(
             status_code=404,
             detail="Product not found."
@@ -381,21 +397,20 @@ def checkout(
     user=Depends(get_current_user)
 ):
 
-    if len(order.items) == 0:
+    if not order.items:
 
         raise HTTPException(
             status_code=400,
             detail="Cart is empty."
         )
 
-    cart = []
-
-    for item in order.items:
-
-        cart.append({
+    cart = [
+        {
             "product_id": item.product_id,
             "quantity": item.quantity
-        })
+        }
+        for item in order.items
+    ]
 
     try:
 
@@ -419,7 +434,7 @@ def checkout(
 
 
 # =========================================================
-# USER - ORDER HISTORY
+# USER ORDERS
 # =========================================================
 
 @app.get("/orders/me")
@@ -433,7 +448,7 @@ def my_orders(
 
 
 # =========================================================
-# ADMIN - DASHBOARD
+# ADMIN DASHBOARD
 # =========================================================
 
 @app.get("/dashboard")
@@ -445,7 +460,7 @@ def dashboard(
 
 
 # =========================================================
-# ADMIN - ALL ORDERS
+# ADMIN ORDERS
 # =========================================================
 
 @app.get("/orders")
