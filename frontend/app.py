@@ -173,14 +173,14 @@ if not st.session_state.logged_in:
 
                 try:
 
-                    response = requests.post(
-                        API_URL + "/login",
-                        json={
-                            "username": username.strip(),
-                            "password": password
-                        },
-                        timeout=5
-                    )
+                   response = requests.post(
+                    API_URL + "/login",
+                    json={
+                      "username": username.strip(),
+                      "password": password
+                    },
+                  timeout=30
+                   )
 
                     if response.status_code == 200:
 
